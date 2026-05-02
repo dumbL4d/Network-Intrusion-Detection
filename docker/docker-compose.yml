@@ -7,9 +7,9 @@ services:
     ports:
       - "8080:80"
     environment:
-      - CSV_DIR=/app/data
+      - CSV_DIR=/app/data/raw
     volumes:
-      - ../data/raw:/app/data:ro,Z
+      - ../data/raw:/app/data/raw:ro,Z
       - ../data/processed:/app/data/processed:Z
       - ../src/detection/realtime_detector.py:/app/src/detection/realtime_detector.py:ro,Z
       - ../src/config.py:/app/src/config.py:ro,Z
