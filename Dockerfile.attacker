@@ -1,0 +1,16 @@
+FROM python:3.9-slim
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    iputils-ping \
+    curl \
+    hping3 \
+    nmap \
+    iperf3 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir requests scapy
+
+COPY traffic_reporter.py /app/traffic_reporter.py
+
+CMD ["tail", "-f", "/dev/null"]

@@ -1,0 +1,49 @@
+services:
+  detector:
+    build:
+      context: .
+      dockerfile: Dockerfile.detector
+    container_name: nids-detector
+    ports:
+      - "8080:8080"
+    environment:
+      - CSV_DIR=/app/data
+    volumes:
+      - ./processed:/app/processed
+      - ./realtime_detector.py:/app/realtime_detector.py:ro
+      - ./config.py:/app/config.py:ro
+      - .:/app/data:ro
+    networks:
+      - nids-network
+    restart: unless-stopped
+
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile.target
+    container_name: target-server
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - nids-network
+    restart: unless-stopped
+
+  attacker:
+    build:
+      context: .
+      dockerfile: Dockerfile.attacker
+    container_name: attacker-shell
+    stdin_open: true
+    tty: true
+    networks:
+      - nids-network
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+
+networks:
+  nids-network:
+    driver: bridge
