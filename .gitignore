@@ -1,5 +1,6 @@
 # Large CSV datasets (several GB each)
 *.csv
+data/raw/
 
 # Python
 __pycache__/
@@ -13,7 +14,7 @@ dist/
 build/
 
 # Processed data
-processed/
+data/processed/
 
 # IDE
 .vscode/

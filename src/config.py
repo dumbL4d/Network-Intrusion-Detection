@@ -1,8 +1,8 @@
 import os
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = BASE_DIR
-OUTPUT_DIR = os.path.join(BASE_DIR, "processed")
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR = os.path.join(BASE_DIR, "data", "raw")
+OUTPUT_DIR = os.path.join(BASE_DIR, "data", "processed")
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 

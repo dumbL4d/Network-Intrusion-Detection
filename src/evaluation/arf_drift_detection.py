@@ -1,4 +1,5 @@
 import os
+import sys
 import pickle
 import json
 import pandas as pd
@@ -8,6 +9,7 @@ from river import forest
 from river import drift
 from river import metrics
 from river import preprocessing
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import (
     DATA_DIR,
     OUTPUT_DIR,

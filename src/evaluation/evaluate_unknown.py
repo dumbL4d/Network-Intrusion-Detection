@@ -1,4 +1,5 @@
 import os
+import sys
 import pickle
 import json
 import pandas as pd
@@ -11,6 +12,7 @@ from sklearn.metrics import (
     classification_report,
     confusion_matrix,
 )
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import (
     DATA_DIR,
     OUTPUT_DIR,

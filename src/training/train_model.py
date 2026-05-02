@@ -1,4 +1,5 @@
 import os
+import sys
 import pickle
 import json
 import time
@@ -16,6 +17,7 @@ from sklearn.metrics import (
     confusion_matrix,
     roc_auc_score,
 )
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import (
     OUTPUT_DIR,
     PROCESSED_TRAIN_PATH,

@@ -1,4 +1,5 @@
 import os
+import sys
 import pickle
 import json
 import time
@@ -13,6 +14,7 @@ import numpy as np
 from sklearn.neural_network import MLPClassifier
 from river import forest
 from river import drift
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import (
     OUTPUT_DIR,
     SCALER_PATH,
@@ -395,6 +397,7 @@ class DetectorHandler(BaseHTTPRequestHandler):
 
 def pretrain_arf():
     logger.info("Pre-training ARF on known attack data...")
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from config import INITIAL_TRAIN_FILES, CHUNK_SIZE
 
     csv_dir = os.environ.get("CSV_DIR", "/app/data")

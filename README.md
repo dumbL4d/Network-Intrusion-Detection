@@ -43,13 +43,13 @@ A real-time Network Intrusion Detection System that uses machine learning to det
 
 ```bash
 cd /Users/abhisht/Desktop/minor/01-12
-python3 run_pipeline.py 1500000
+python3 src/run_pipeline.py 1500000
 ```
 
 This executes:
-1. `combine_and_clean.py` - Merges 4 initial training CSV files
-2. `preprocess.py` - Feature selection, scaling, train/test split
-3. `train_model.py` - Trains MLP (256-128-64 architecture)
+1. `src/training/combine_and_clean.py` - Merges 4 initial training CSV files
+2. `src/training/preprocess.py` - Feature selection, scaling, train/test split
+3. `src/training/train_model.py` - Trains MLP (256-128-64 architecture)
 
 ### Launch Detection System
 
@@ -88,6 +88,12 @@ curl -X POST http://localhost:8080/predict \
     "Total Fwd Packets": 19,
     ...
   }'
+```
+
+### Run Detection Server (Direct)
+
+```bash
+python3 src/detection/realtime_detector.py
 ```
 
 Response:
@@ -144,13 +150,13 @@ Place dataset files in the project root:
 
 ### Evaluate on Unknown Attacks
 ```bash
-python3 evaluate_unknown.py
+python3 src/evaluation/evaluate_unknown.py
 ```
 Tests MLP confidence and accuracy on unseen attack types.
 
 ### ARF Drift Detection Evaluation
 ```bash
-python3 arf_drift_detection.py
+python3 src/evaluation/arf_drift_detection.py
 ```
 Streams unknown attack data through ARF and measures drift adaptation.
 
@@ -165,29 +171,38 @@ Edit `config.py` to modify:
 ## Project Structure
 
 ```
-├── config.py                 # Configuration & hyperparameters
-├── run_pipeline.py           # Orchestrates training pipeline
-├── combine_and_clean.py      # Merges & cleans CSV datasets
-├── preprocess.py             # Feature selection & scaling
-├── train_model.py            # MLP training & evaluation
-├── realtime_detector.py      # HTTP API server (MLP + ARF)
-├── traffic_reporter.py       # Monitors /proc/net/*, reports to detector
-├── arf_drift_detection.py   # ARF + ADWIN evaluation
-├── evaluate_unknown.py       # MLP evaluation on unknown attacks
-├── docker-compose.yml       # Docker services orchestration
-├── Dockerfile.detector      # Detector container
-├── Dockerfile.target        # Nginx target container
-├── Dockerfile.attacker      # Attacker tools container
-├── nginx.conf               # Nginx configuration
-├── target_monitor.sh        # Target-side connection monitoring
-├── requirements.txt         # Python dependencies
-└── processed/               # Generated artifacts
-    ├── mlp_model.pkl        # Trained MLP
-    ├── mlp_weights.npz      # Model weights
-    ├── scaler.pkl           # Feature scaler
-    ├── label_encoder.pkl    # Label encoder
-    ├── feature_names.pkl    # Feature list
-    └── *.json               # Metrics & evaluations
+├── src/
+│   ├── config.py                 # Configuration & hyperparameters
+│   ├── run_pipeline.py           # Orchestrates training pipeline
+│   ├── training/
+│   │   ├── combine_and_clean.py  # Merges & cleans CSV datasets
+│   │   ├── preprocess.py         # Feature selection & scaling
+│   │   └── train_model.py        # MLP training & evaluation
+│   ├── detection/
+│   │   ├── realtime_detector.py  # HTTP API server (MLP + ARF)
+│   │   ├── traffic_reporter.py   # Monitors /proc/net/*, reports to detector
+│   │   └── target_monitor.sh     # Target-side connection monitoring
+│   └── evaluation/
+│       ├── arf_drift_detection.py # ARF + ADWIN evaluation
+│       └── evaluate_unknown.py   # MLP evaluation on unknown attacks
+├── docker/
+│   ├── docker-compose.yml       # Docker services orchestration
+│   ├── Dockerfile.detector      # Detector container
+│   ├── Dockerfile.target        # Nginx target container
+│   ├── Dockerfile.attacker      # Attacker tools container
+│   └── nginx.conf               # Nginx configuration
+├── data/
+│   ├── raw/                      # Original CSV datasets (not tracked)
+│   └── processed/                # Generated artifacts (not tracked)
+│       ├── mlp_model.pkl         # Trained MLP
+│       ├── mlp_weights.npz       # Model weights
+│       ├── scaler.pkl            # Feature scaler
+│       ├── label_encoder.pkl     # Label encoder
+│       ├── feature_names.pkl     # Feature list
+│       └── *.json                # Metrics & evaluations
+├── requirements.txt              # Python dependencies
+├── README.md
+└── LICENSE
 ```
 
 ## Dependencies

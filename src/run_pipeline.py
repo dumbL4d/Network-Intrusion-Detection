@@ -11,6 +11,7 @@ Usage:
   target_rows: Total rows to sample for training (default: 1500000)
 """
 import sys
+import os
 import subprocess
 
 
@@ -33,9 +34,10 @@ def main():
     print("Network Intrusion Detection - Training Pipeline")
     print(f"Target training rows: {int(target_rows):,}")
 
-    run_step("combine_and_clean.py", "Combine & Clean Data", target_rows)
-    run_step("preprocess.py", "Preprocess & Feature Selection")
-    run_step("train_model.py", "Train MLP Model")
+    base_path = os.path.join(os.path.dirname(__file__), "training")
+    run_step(os.path.join(base_path, "combine_and_clean.py"), "Combine & Clean Data", target_rows)
+    run_step(os.path.join(base_path, "preprocess.py"), "Preprocess & Feature Selection")
+    run_step(os.path.join(base_path, "train_model.py"), "Train MLP Model")
 
     print("\n\n" + "=" * 60)
     print("PIPELINE COMPLETE")

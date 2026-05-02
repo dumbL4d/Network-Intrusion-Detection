@@ -1,10 +1,12 @@
 import os
+import sys
 import pickle
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.model_selection import train_test_split
 from sklearn.feature_selection import VarianceThreshold
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import (
     COMBINED_TRAIN_PATH,
     OUTPUT_DIR,
