@@ -1,12 +1,12 @@
-FROM python:3.9-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY config.py .
-COPY realtime_detector.py .
+COPY src/config.py .
+COPY src/detection/realtime_detector.py .
 
 EXPOSE 8080
 

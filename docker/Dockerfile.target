@@ -1,6 +1,9 @@
 FROM nginx:alpine
 
-COPY target_monitor.sh /usr/local/bin/target_monitor.sh
+RUN apk add --no-cache bash curl
+
+COPY src/detection/target_monitor.sh /usr/local/bin/target_monitor.sh
+
 RUN chmod +x /usr/local/bin/target_monitor.sh
 
-CMD ["sh", "-c", "/usr/local/bin/target_monitor.sh & nginx -g 'daemon off;'"]
+CMD ["/bin/bash", "-c", "/usr/local/bin/target_monitor.sh & nginx -g 'daemon off;'"]

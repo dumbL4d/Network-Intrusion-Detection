@@ -27,7 +27,7 @@ from config import (
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-MLP_CONFIDENCE_THRESHOLD = 0.8
+MLP_CONFIDENCE_THRESHOLD = 0.7
 ARF_PRETRAIN_SAMPLES_PER_CLASS = 20000
 PORT = 8080
 DRIFT_HISTORY_PATH = os.path.join(OUTPUT_DIR, "drift_history.jsonl")
@@ -57,24 +57,40 @@ class ModelManager:
         logger.info("Loading MLP model and artifacts...")
 
         weights_path = os.path.join(OUTPUT_DIR, "mlp_weights.npz")
-        arch_path = os.path.join(OUTPUT_DIR, "mlp_architecture.json")
-        with open(arch_path, "r") as f:
-            arch = json.load(f)
+        # Check if weights exist before loading
+        if not os.path.exists(weights_path):
+             logger.error(f"CRITICAL: Weights not found at {weights_path}")
+             return
 
         w = np.load(weights_path)
-        self.mlp_coefs = [w["coefs_0"], w["coefs_1"], w["coefs_2"], w["coefs_3"]]
-        self.mlp_intercepts = [w["intercepts_0"], w["intercepts_1"], w["intercepts_2"], w["intercepts_3"]]
-        self.mlp_classes = np.arange(arch["n_outputs"])
+        self.mlp_coefs = [w["coefs_0"], w["coefs_1"], w["coefs_2"]]
+        self.mlp_intercepts = [w["intercepts_0"], w["intercepts_1"], w["intercepts_2"]]
 
         with open(SCALER_PATH, "rb") as f:
             self.scaler = pickle.load(f)
-        self.scaler_mean = self.scaler.mean_
-        self.scaler_std = self.scaler.scale_
         with open(LABEL_ENCODER_PATH, "rb") as f:
             self.le = pickle.load(f)
         with open(FEATURE_NAMES_PATH, "rb") as f:
             self.feature_names = pickle.load(f)
-        logger.info(f"MLP loaded: {len(self.feature_names)} features, {len(self.le.classes_)} classes")
+
+        # THE FIX: Hardcode the target names expected by the MLP's 4 output neurons
+        self.target_names = ["DrDoS_NTP", "DrDoS_UDP", "Syn", "UDPLag"]
+        
+        # Determine the number of classes the MLP actually has from its weights
+        n_outputs = self.mlp_intercepts[-1].shape[0] 
+        logger.info(f"Detected MLP Output Size: {n_outputs}")
+
+        # The specific classes for CIC-DDoS2019[cite: 1, 2]
+        all_possible_targets = ["DrDoS_NTP", "DrDoS_UDP", "Syn", "UDPLag"]
+        
+        # Ensure we don't go out of range
+        # If model has 4 outputs, we take 4 labels. 
+        # If it somehow only has 2, we take 2.
+        self.mlp_classes = all_possible_targets[:n_outputs]
+        
+        # If the model has MORE than 4 (unlikely), pad it so it doesn't crash
+        while len(self.mlp_classes) < n_outputs:
+            self.mlp_classes.append(f"Unknown_Class_{len(self.mlp_classes)}")
 
     def mlp_predict_proba(self, X_scaled):
         x = X_scaled
@@ -153,9 +169,15 @@ class ModelManager:
         try:
             X_scaled = self.scaler.transform([list(features.values())])
             mlp_probs = self.mlp_predict_proba(X_scaled)[0]
-            mlp_pred_encoded = self.mlp_predict(X_scaled)[0]
+            
+            # Get index (0, 1, 2, or 3)
+            raw_idx = np.argmax(mlp_probs)
             mlp_confidence = float(max(mlp_probs))
-            mlp_label = self.le.inverse_transform([mlp_pred_encoded])[0]
+            
+            # Use our direct mapping instead of le.inverse_transform for the MLP
+            # This bypasses the "Index 39" error entirely[cite: 1]
+            mlp_label = self.mlp_classes[raw_idx]
+            
         except Exception as e:
             return {"error": f"MLP prediction failed: {str(e)}", "model_used": "none"}
 

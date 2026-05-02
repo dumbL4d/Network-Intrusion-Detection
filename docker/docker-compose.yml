@@ -5,14 +5,14 @@ services:
       dockerfile: docker/Dockerfile.detector
     container_name: nids-detector
     ports:
-      - "8080:8080"
+      - "8080:80"
     environment:
       - CSV_DIR=/app/data
     volumes:
-      - ./data/processed:/app/data/processed
-      - ./src/detection/realtime_detector.py:/app/src/detection/realtime_detector.py:ro
-      - ./src/config.py:/app/src/config.py:ro
-      - ./data:/app/data:ro
+      - ../data/raw:/app/data:ro,Z
+      - ../data/processed:/app/data/processed:Z
+      - ../src/detection/realtime_detector.py:/app/src/detection/realtime_detector.py:ro,Z
+      - ../src/config.py:/app/src/config.py:ro,Z
     working_dir: /app
     command: python3 src/detection/realtime_detector.py
     networks:
@@ -25,9 +25,9 @@ services:
       dockerfile: docker/Dockerfile.target
     container_name: target-server
     ports:
-      - "80:80"
+      - "8081:80"
     volumes:
-      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro,Z
     networks:
       - nids-network
     restart: unless-stopped
