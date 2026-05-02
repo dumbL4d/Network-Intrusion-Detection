@@ -103,6 +103,8 @@ Response:
 
 ## Dataset
 
+Download the CICDDoS2019 dataset from: https://cicresearch.ca//CICDDoS2019/
+
 ### Known Attacks (Training)
 - Syn Flood
 - UDPLag
