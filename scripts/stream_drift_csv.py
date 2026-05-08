@@ -10,6 +10,7 @@ Examples:
 """
 import requests
 import csv
+import math
 import time
 import sys
 import os
@@ -41,7 +42,10 @@ def clean_row(row):
         if k in DROP_COLS:
             continue
         try:
-            d[k] = float(v)
+            val = float(v)
+            if math.isinf(val) or math.isnan(val):
+                val = 0.0
+            d[k] = val
         except (ValueError, TypeError):
             d[k] = 0.0
     return d
