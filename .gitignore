@@ -25,3 +25,6 @@ data/processed/
 # OS
 .DS_Store
 desktop.ini
+
+# Internal reference
+PROJECT_REFERENCE.md
