@@ -178,16 +178,13 @@ def evaluate_model(model, X_test, y_test, le, training_time):
 
 def save_artifacts(model, metrics, feature_names):
     MODEL_WEIGHTS_PATH = os.path.join(OUTPUT_DIR, "mlp_weights.npz")
-    np.savez(
-        MODEL_WEIGHTS_PATH,
-        coefs_0=model.coefs_[0],
-        coefs_1=model.coefs_[1],
-        coefs_2=model.coefs_[2],
-        intercepts_0=model.intercepts_[0],
-        intercepts_1=model.intercepts_[1],
-        intercepts_2=model.intercepts_[2],
-    )
-    print(f"\nSaved model weights: {MODEL_WEIGHTS_PATH}")
+    save_dict = {}
+    for i, c in enumerate(model.coefs_):
+        save_dict[f"coefs_{i}"] = c
+    for i, c in enumerate(model.intercepts_):
+        save_dict[f"intercepts_{i}"] = c
+    np.savez(MODEL_WEIGHTS_PATH, **save_dict)
+    print(f"\nSaved model weights ({len(model.coefs_)} layers): {MODEL_WEIGHTS_PATH}")
 
     model_arch = {
         "hidden_layer_sizes": MLP_PARAMS["hidden_layer_sizes"],

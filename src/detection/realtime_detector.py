@@ -57,14 +57,23 @@ class ModelManager:
         logger.info("Loading MLP model and artifacts...")
 
         weights_path = os.path.join(OUTPUT_DIR, "mlp_weights.npz")
-        # Check if weights exist before loading
         if not os.path.exists(weights_path):
              logger.error(f"CRITICAL: Weights not found at {weights_path}")
              return
 
         w = np.load(weights_path)
-        self.mlp_coefs = [w["coefs_0"], w["coefs_1"], w["coefs_2"]]
-        self.mlp_intercepts = [w["intercepts_0"], w["intercepts_1"], w["intercepts_2"]]
+        self.mlp_coefs = []
+        self.mlp_intercepts = []
+        i = 0
+        while True:
+            coef_key = f"coefs_{i}"
+            intercept_key = f"intercepts_{i}"
+            if coef_key not in w:
+                break
+            self.mlp_coefs.append(w[coef_key])
+            self.mlp_intercepts.append(w[intercept_key])
+            i += 1
+        logger.info(f"Loaded MLP with {len(self.mlp_coefs)} layers")
 
         with open(SCALER_PATH, "rb") as f:
             self.scaler = pickle.load(f)
@@ -73,24 +82,15 @@ class ModelManager:
         with open(FEATURE_NAMES_PATH, "rb") as f:
             self.feature_names = pickle.load(f)
 
-        # THE FIX: Hardcode the target names expected by the MLP's 4 output neurons
-        self.target_names = ["DrDoS_NTP", "DrDoS_UDP", "Syn", "UDPLag"]
-        
-        # Determine the number of classes the MLP actually has from its weights
-        n_outputs = self.mlp_intercepts[-1].shape[0] 
-        logger.info(f"Detected MLP Output Size: {n_outputs}")
-
-        # The specific classes for CIC-DDoS2019[cite: 1, 2]
-        all_possible_targets = ["DrDoS_NTP", "DrDoS_UDP", "Syn", "UDPLag"]
-        
-        # Ensure we don't go out of range
-        # If model has 4 outputs, we take 4 labels. 
-        # If it somehow only has 2, we take 2.
-        self.mlp_classes = all_possible_targets[:n_outputs]
-        
-        # If the model has MORE than 4 (unlikely), pad it so it doesn't crash
-        while len(self.mlp_classes) < n_outputs:
-            self.mlp_classes.append(f"Unknown_Class_{len(self.mlp_classes)}")
+        n_outputs = self.mlp_intercepts[-1].shape[0]
+        self.mlp_classes = ["DrDoS_NTP", "DrDoS_UDP", "Syn", "UDPLag"]
+        # Ensure mlp_classes length matches the model output size
+        if len(self.mlp_classes) != n_outputs:
+            logger.warning(f"MLP output size ({n_outputs}) != expected ({len(self.mlp_classes)}), adjusting")
+            self.mlp_classes = self.mlp_classes[:n_outputs]
+            while len(self.mlp_classes) < n_outputs:
+                self.mlp_classes.append(f"Unknown_Class_{len(self.mlp_classes)}")
+        logger.info(f"MLP classes: {self.mlp_classes}")
 
     def mlp_predict_proba(self, X_scaled):
         x = X_scaled
@@ -142,21 +142,7 @@ class ModelManager:
         return {f: float(df[f].iloc[0]) for f in self.feature_names}
 
     def prepare_arf_features(self, raw_data: dict) -> dict:
-        df = pd.DataFrame([raw_data])
-        df.columns = df.columns.str.strip()
-        for c in DROP_COLUMNS:
-            if c in df.columns:
-                df = df.drop(columns=[c])
-        if "Label" in df.columns:
-            df = df.drop(columns=["Label"])
-        df = df.replace([np.inf, -np.inf], np.nan)
-        numeric_cols = df.select_dtypes(include=[np.number]).columns
-        df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, errors="coerce")
-        df = df.fillna(0)
-        arf_features = list(self.arf_label_map.keys())
-        arf_features.remove("Label") if "Label" in arf_features else None
-        raw_feature_names = [f for f in df.columns if f != "Label"]
-        return {f: float(df[f].iloc[0]) for f in raw_feature_names}
+        return self.prepare_features(raw_data)
 
     def classify(self, raw_data: dict):
         self.total_predictions += 1
@@ -423,6 +409,7 @@ def pretrain_arf():
     from config import INITIAL_TRAIN_FILES, CHUNK_SIZE
 
     csv_dir = os.environ.get("CSV_DIR", "/app/data")
+    feature_names = models.feature_names
 
     samples = []
     for filename, label in INITIAL_TRAIN_FILES.items():
@@ -439,8 +426,11 @@ def pretrain_arf():
                 numeric_cols = chunk.select_dtypes(include=[np.number]).columns
                 chunk[numeric_cols] = chunk[numeric_cols].apply(pd.to_numeric, errors="coerce")
                 chunk = chunk.fillna(0)
+                for f in feature_names:
+                    if f not in chunk.columns:
+                        chunk[f] = 0
                 for _, row in chunk.iterrows():
-                    sample = {f: float(row[f]) for f in chunk.columns if f != "Label"}
+                    sample = {f: float(row[f]) for f in feature_names}
                     samples.append((sample, label))
                     count += 1
                     if count >= ARF_PRETRAIN_SAMPLES_PER_CLASS:

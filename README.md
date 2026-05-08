@@ -42,7 +42,7 @@ A real-time Network Intrusion Detection System that uses machine learning to det
 ### Run Training Pipeline
 
 ```bash
-cd /Users/abhisht/Desktop/minor/01-12
+cd minor/01-12
 python3 src/run_pipeline.py 1500000
 ```
 
