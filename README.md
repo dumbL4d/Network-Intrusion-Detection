@@ -6,7 +6,7 @@ Real-time ML-powered defense against DDoS attacks. Deploys via Docker, detects k
 
 ```mermaid
 graph LR
-    A["Attacker Container<br/>(hping3, nmap, iperf3)"]
+    A["Attacker Container<br/>(hping3)"]
     T["Target Container<br/>(Nginx :80)"]
     D["Detector Container<br/>(MLP + ARF :8080)"]
 
