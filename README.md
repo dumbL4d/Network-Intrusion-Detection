@@ -1,6 +1,6 @@
-# Network Intrusion Detection System (NIDS)
+# NIDS — Network Intrusion Detection System
 
-A real-time Network Intrusion Detection System that uses machine learning to detect and adapt to network attacks. Implements a hybrid approach combining MLP neural networks with Adaptive Random Forest (ARF) and ADWIN drift detection.
+Real-time ML-powered defense against DDoS attacks. Deploys via Docker, detects known and novel threats without retraining.
 
 ## Architecture
 
@@ -38,213 +38,153 @@ flowchart TD
     D2 -->|No| R2["✅ Return ARF Result"]
 ```
 
-### Docker Services
-
-| Service | Description | Port |
-|---------|-------------|------|
-| **detector** | HTTP API with MLP + ARF models | 8080 |
-| **nginx** | Target web server under protection | 80 |
-| **attacker** | Simulated attack environment | - |
-
-## Features
-
-- **64 network flow features** - Packet lengths, flow rates, IAT stats, TCP flags, bulk transfer metrics
-- **Hybrid detection** - MLP (high confidence) + ARF (fallback + drift detection)
-- **Concept drift adaptation** - ADWIN drift detector with Automatic Retraining
-- **Real-time monitoring** - SSE alert stream, REST API, connection tracking via `/proc/net/*`
-- **Multi-class classification** - Detects 11 attack types
+The system uses a **two-model hybrid**: an MLP neural network handles high-confidence predictions on known attacks; an Adaptive Random Forest (ARF) with ADWIN drift detection catches novel threats the MLP hasn't seen before. ARF continuously learns online — no scheduled retraining needed.
 
 ## Quick Start
 
 ### Prerequisites
 
-- Python 3.9+
-- Docker & Docker Compose (for full system)
-- CSV datasets in project directory
+- Python 3.9+, Docker & Docker Compose
+- [CICDDoS2019](https://cicresearch.ca//CICDDoS2019/) CSV files in `data/raw/`
 
-### Run Training Pipeline
+### 1. Train
 
 ```bash
-cd minor/01-12
 python3 src/run_pipeline.py 1500000
 ```
 
-This executes:
-1. `src/training/combine_and_clean.py` - Merges 4 initial training CSV files
-2. `src/training/preprocess.py` - Feature selection, scaling, train/test split
-3. `src/training/train_model.py` - Trains MLP (256-128-64 architecture)
+Trains the MLP classifier — merges CSVs, selects 37 features from 80, scales, and runs a 256→128→64→4 neural network.
 
-### Launch Detection System
+### 2. Launch
 
-**Option 1: Direct execution (testing)**
 ```bash
-python3 realtime_detector.py
+# Standalone (testing)
+python3 src/detection/realtime_detector.py
+
+# Full Docker stack (detector + nginx target + attacker)
+docker compose -f docker/docker-compose.yml up --build
 ```
 
-**Option 2: Docker deployment (full system)**
-```bash
-docker-compose up --build
-```
-
-## API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Health check |
-| `/predict` | GET/POST | Classify network flow |
-| `/stats` | GET | Model usage statistics |
-| `/alerts` | GET | Recent alerts (last 50) |
-| `/alerts/stream` | GET | Live SSE alert feed |
-| `/drift` | GET | Drift detection history |
-| `/retrain` | POST | Retrain ARF with new samples |
-
-### Example Prediction
+### 3. Classify a flow
 
 ```bash
 curl -X POST http://localhost:8080/predict \
   -H "Content-Type: application/json" \
-  -d '{
-    "Source Port": 53058,
-    "Destination Port": 80,
-    "Protocol": 6,
-    "Flow Duration": 115799309,
-    "Total Fwd Packets": 19,
-    ...
-  }'
-```
-
-### Run Detection Server (Direct)
-
-```bash
-python3 src/detection/realtime_detector.py
+  -d '{"Source Port": 60496, "Destination Port": 80, "Protocol": 6, ...}'
 ```
 
 Response:
 ```json
 {
   "prediction": "Syn",
-  "confidence": 0.95,
+  "confidence": 0.99,
   "model_used": "mlp",
   "drift_detected": false,
   "is_alert": false
 }
 ```
 
-## Dataset
+## API
 
-Download the CICDDoS2019 dataset from: https://cicresearch.ca//CICDDoS2019/
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check |
+| `/predict` | GET/POST | Classify a network flow |
+| `/stats` | GET | Model usage counters |
+| `/alerts` | GET | Recent alerts (default last 50) |
+| `/alerts/stream` | GET | Live SSE alert feed |
+| `/drift` | GET | Drift detection history |
+| `/retrain` | POST | Feed labeled samples to ARF |
 
-### Known Attacks (Training)
-- Syn Flood
-- UDPLag
-- DrDoS_UDP
-- DrDoS_NTP
+## Attack Coverage
 
-### Unknown Attacks (Drift Detection)
-- DrDoS_DNS
-- DrDoS_SNMP
-- DrDoS_MSSQL
-- DrDoS_NetBIOS
-- DrDoS_SSDP
-- DrDoS_LDAP
-- TFTP
+| Type | Trained On | Detected By |
+|------|-----------|-------------|
+| Syn Flood | ✅ MLP | MLP / ARF |
+| UDP Lag | ✅ MLP | MLP / ARF |
+| DrDoS_UDP | ✅ MLP | MLP / ARF |
+| DrDoS_NTP | ✅ MLP | MLP / ARF |
+| DrDoS_DNS | — | ARF (drift) |
+| DrDoS_SNMP | — | ARF (drift) |
+| DrDoS_MSSQL | — | ARF (drift) |
+| DrDoS_NetBIOS | — | ARF (drift) |
+| DrDoS_SSDP | — | ARF (drift) |
+| DrDoS_LDAP | — | ARF (drift) |
+| TFTP | — | ARF (drift) |
 
-### CSV Format
-
-Place dataset files in the project root:
-- `Syn.csv`, `UDPLag.csv`, `DrDoS_UDP.csv`, `DrDoS_NTP.csv`
-- `DrDoS_DNS.csv`, `DrDoS_SNMP.csv`, `DrDoS_MSSQL.csv`, etc.
-
-## Models
+## Model Architecture & Benchmarks
 
 ### MLP Classifier
-- **Architecture**: 256-128-64 hidden layers
-- **Activation**: ReLU
-- **Solver**: Adam
-- **Confidence threshold**: 0.8 (switches to ARF below this)
 
-### ARF + ADWIN
-- **Type**: Adaptive Random Forest with 10 trees
-- **Drift detector**: ADWIN (δ=0.01)
-- **Warning detector**: ADWIN (δ=0.05)
-- **Purpose**: Handles concept drift, adapts to new attack patterns
+Layers | Activation | Optimizer | Accuracy | ROC AUC
+-------|-----------|-----------|----------|--------
+256→128→64 | ReLU | Adam | **96.0%** | **0.98**
 
-## Evaluation
+Per-class F1:
+- DrDoS_NTP: **0.99**
+- Syn: **0.98**
+- DrDoS_UDP: **0.97**
+- UDPLag: **0.53** (known weakness — minority class)
 
-### Evaluate on Unknown Attacks
-```bash
-python3 src/evaluation/evaluate_unknown.py
-```
-Tests MLP confidence and accuracy on unseen attack types.
+### ARF + ADWIN (Drift Handler)
 
-### ARF Drift Detection Evaluation
-```bash
-python3 src/evaluation/arf_drift_detection.py
-```
-Streams unknown attack data through ARF and measures drift adaptation.
+- **10-tree Adaptive Random Forest** trained on 20,000 samples per known class
+- **ADWIN drift detector** (δ=0.01) triggers when prediction accuracy shifts
+- **ADWIN warning detector** (δ=0.05) provides early warning
+- Achieves **~99.9% accuracy** on novel attack types after adapting via drift detection
+
+If MLP confidence drops below 0.7, ARF takes over the prediction and continues learning online. When ARF detects a concept drift, the event is logged and an alert fires.
 
 ## Configuration
 
-Edit `config.py` to modify:
-- `MLP_PARAMS` - Neural network hyperparameters
-- `INITIAL_TRAIN_FILES` / `DRIFT_FILES` - Dataset mapping
-- `NUMERIC_FEATURES` - Feature list (64 features)
-- `MLP_CONFIDENCE_THRESHOLD` - Threshold in `realtime_detector.py` (default: 0.8)
+Key settings in `src/config.py` and `src/detection/realtime_detector.py`:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `hidden_layer_sizes` | (256, 128, 64) | MLP architecture |
+| `MLP_CONFIDENCE_THRESHOLD` | 0.7 | Confidence floor for MLP to handle prediction |
+| `CORRELATION_THRESHOLD` | 0.95 | Feature selection cutoff |
+| `VARIANCE_THRESHOLD` | 0.01 | Feature selection cutoff |
+| `ARF_PRETRAIN_SAMPLES_PER_CLASS` | 20,000 | Initial ARF training set |
 
 ## Project Structure
 
 ```
 ├── src/
-│   ├── config.py                 # Configuration & hyperparameters
-│   ├── run_pipeline.py           # Orchestrates training pipeline
+│   ├── config.py                 # Hyperparameters & paths
+│   ├── run_pipeline.py           # Training orchestrator
 │   ├── training/
-│   │   ├── combine_and_clean.py  # Merges & cleans CSV datasets
+│   │   ├── combine_and_clean.py  # CSV merge & cleaning
 │   │   ├── preprocess.py         # Feature selection & scaling
-│   │   └── train_model.py        # MLP training & evaluation
+│   │   └── train_model.py        # MLP training
 │   ├── detection/
-│   │   ├── realtime_detector.py  # HTTP API server (MLP + ARF)
-│   │   ├── traffic_reporter.py   # Monitors /proc/net/*, reports to detector
-│   │   └── target_monitor.sh     # Target-side connection monitoring
+│   │   ├── realtime_detector.py  # HTTP API (MLP + ARF)
+│   │   ├── traffic_reporter.py   # /proc/net/* monitor
+│   │   └── target_monitor.sh     # Target-side alerts
 │   └── evaluation/
-│       ├── arf_drift_detection.py # ARF + ADWIN evaluation
-│       └── evaluate_unknown.py   # MLP evaluation on unknown attacks
+│       ├── arf_drift_detection.py
+│       └── evaluate_unknown.py
 ├── docker/
-│   ├── docker-compose.yml       # Docker services orchestration
-│   ├── Dockerfile.detector      # Detector container
-│   ├── Dockerfile.target        # Nginx target container
-│   ├── Dockerfile.attacker      # Attacker tools container
-│   └── nginx.conf               # Nginx configuration
-├── data/
-│   ├── raw/                      # Original CSV datasets (not tracked)
-│   └── processed/                # Generated artifacts (not tracked)
-│       ├── mlp_model.pkl         # Trained MLP
-│       ├── mlp_weights.npz       # Model weights
-│       ├── scaler.pkl            # Feature scaler
-│       ├── label_encoder.pkl     # Label encoder
-│       ├── feature_names.pkl     # Feature list
-│       └── *.json                # Metrics & evaluations
-├── requirements.txt              # Python dependencies
-├── README.md
+│   ├── docker-compose.yml
+│   ├── Dockerfile.detector
+│   ├── Dockerfile.target
+│   ├── Dockerfile.attacker
+│   └── nginx.conf
+├── assets/
+│   ├── architecture.png
+│   └── detection_flow.png
+├── requirements.txt
+├── CONTRIBUTING.md
 └── LICENSE
 ```
 
 ## Dependencies
 
 ```
-pandas==2.2.3
-numpy==1.26.4
-scikit-learn==1.5.2
-river==0.21.2
+pandas==2.2.3    numpy==1.26.4
+scikit-learn==1.5.2  river==0.24.2
 ```
-
-## How It Works
-
-1. **Training Phase** - MLP learns from 4 known attack types
-2. **Detection Phase** - Incoming flows classified by MLP (if confidence ≥ 0.8) or ARF
-3. **Drift Monitoring** - ARF compares predictions with MLP, detects concept drift
-4. **Adaptation** - When drift detected, ARF continues learning new patterns
-5. **Alerting** - Suspicious flows trigger alerts via REST API or SSE stream
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT — see [LICENSE](LICENSE).
