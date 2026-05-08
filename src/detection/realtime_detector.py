@@ -22,6 +22,9 @@ from config import (
     FEATURE_NAMES_PATH,
     MODEL_PATH,
     DROP_COLUMNS,
+    OOD_STATS_PATH,
+    OOD_MAHALANOBIS_THRESHOLD,
+    OOD_ENTROPY_THRESHOLD,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -91,18 +94,51 @@ class ModelManager:
             while len(self.mlp_classes) < n_outputs:
                 self.mlp_classes.append(f"Unknown_Class_{len(self.mlp_classes)}")
         logger.info(f"MLP classes: {self.mlp_classes}")
+        self.load_ood_stats()
 
-    def mlp_predict_proba(self, X_scaled):
+    def load_ood_stats(self):
+        logger.info("Loading OOD detection statistics...")
+        with open(OOD_STATS_PATH, "rb") as f:
+            ood_data = pickle.load(f)
+        self.ood_class_means = ood_data["class_means"]
+        self.ood_cov_inv = ood_data["cov_inv"]
+        logger.info(f"OOD stats loaded: {len(self.ood_class_means)} classes, "
+                     f"{self.ood_cov_inv.shape[0]} dimensions")
+
+    def forward_pass(self, X_scaled):
         x = X_scaled
         n_layers = len(self.mlp_coefs)
         for i, (coef, intercept) in enumerate(zip(self.mlp_coefs, self.mlp_intercepts)):
             x = x @ coef + intercept
             if i < n_layers - 1:
                 x = np.maximum(x, 0)
+                if i == n_layers - 2:
+                    penultimate = x.copy()
             else:
                 exp_x = np.exp(x - np.max(x, axis=1, keepdims=True))
                 x = exp_x / exp_x.sum(axis=1, keepdims=True)
-        return x
+        return penultimate, x
+
+    def mlp_predict_proba(self, X_scaled):
+        _, proba = self.forward_pass(X_scaled)
+        return proba
+
+    def mahalanobis_distance(self, activation):
+        diffs = self.ood_class_means - activation
+        dists = np.sum((diffs @ self.ood_cov_inv) * diffs, axis=1)
+        return float(np.min(dists))
+
+    def softmax_entropy(self, probs):
+        return float(-np.sum(probs * np.log(np.maximum(probs, 1e-12))))
+
+    def is_ood(self, activation, probs):
+        self._last_mahal_dist = self.mahalanobis_distance(activation)
+        self._last_entropy = self.softmax_entropy(probs)
+        is_ood = self._last_mahal_dist > OOD_MAHALANOBIS_THRESHOLD or self._last_entropy > OOD_ENTROPY_THRESHOLD
+        if is_ood:
+            logger.debug(f"OOD detected: mahal_dist={self._last_mahal_dist:.1f}, entropy={self._last_entropy:.4f}, "
+                         f"thresholds: mahal>{OOD_MAHALANOBIS_THRESHOLD} or entropy>{OOD_ENTROPY_THRESHOLD}")
+        return is_ood
 
     def mlp_predict(self, X_scaled):
         proba = self.mlp_predict_proba(X_scaled)
@@ -154,20 +190,20 @@ class ModelManager:
 
         try:
             X_scaled = self.scaler.transform([list(features.values())])
-            mlp_probs = self.mlp_predict_proba(X_scaled)[0]
+            penultimate, mlp_probs = self.forward_pass(X_scaled)
+            mlp_probs = mlp_probs[0]
+            penultimate = penultimate[0]
             
-            # Get index (0, 1, 2, or 3)
             raw_idx = np.argmax(mlp_probs)
             mlp_confidence = float(max(mlp_probs))
-            
-            # Use our direct mapping instead of le.inverse_transform for the MLP
-            # This bypasses the "Index 39" error entirely[cite: 1]
             mlp_label = self.mlp_classes[raw_idx]
+            
+            ood_flag = self.is_ood(penultimate, mlp_probs)
             
         except Exception as e:
             return {"error": f"MLP prediction failed: {str(e)}", "model_used": "none"}
 
-        if mlp_confidence >= MLP_CONFIDENCE_THRESHOLD:
+        if mlp_confidence >= MLP_CONFIDENCE_THRESHOLD and not ood_flag:
             self.mlp_count += 1
             arf_features = self.prepare_arf_features(raw_data)
             arf_pred = self.arf.predict_one(arf_features)
@@ -196,6 +232,9 @@ class ModelManager:
                 "prediction": mlp_label,
                 "confidence": round(mlp_confidence, 4),
                 "model_used": "mlp",
+                "ood_detected": False,
+                "mahalanobis_distance": round(self._last_mahal_dist, 1),
+                "softmax_entropy": round(self._last_entropy, 4),
                 "drift_detected": drift_detected,
                 "arf_prediction": arf_label,
             }
@@ -232,6 +271,9 @@ class ModelManager:
                     "prediction": arf_label,
                     "confidence": round(arf_confidence, 4),
                     "model_used": "arf",
+                    "ood_detected": ood_flag,
+                    "mahalanobis_distance": round(self._last_mahal_dist, 1),
+                    "softmax_entropy": round(self._last_entropy, 4),
                     "mlp_confidence": round(mlp_confidence, 4),
                     "mlp_prediction": mlp_label,
                     "drift_detected": drift_detected,
@@ -244,6 +286,9 @@ class ModelManager:
                     "prediction": "UNKNOWN",
                     "confidence": 0.0,
                     "model_used": "fallback",
+                    "ood_detected": ood_flag,
+                    "mahalanobis_distance": round(self._last_mahal_dist, 1),
+                    "softmax_entropy": round(self._last_entropy, 4),
                     "mlp_prediction": mlp_label,
                     "mlp_confidence": round(mlp_confidence, 4),
                     "error": str(e),

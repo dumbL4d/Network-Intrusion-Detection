@@ -29,6 +29,9 @@ SCALER_PATH = os.path.join(OUTPUT_DIR, "scaler.pkl")
 LABEL_ENCODER_PATH = os.path.join(OUTPUT_DIR, "label_encoder.pkl")
 FEATURE_NAMES_PATH = os.path.join(OUTPUT_DIR, "feature_names.pkl")
 MODEL_PATH = os.path.join(OUTPUT_DIR, "mlp_model.pkl")
+OOD_STATS_PATH = os.path.join(OUTPUT_DIR, "ood_stats.pkl")
+OOD_MAHALANOBIS_THRESHOLD = 200.0
+OOD_ENTROPY_THRESHOLD = 1.2
 
 DROP_COLUMNS = [
     "Unnamed: 0",

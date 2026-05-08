@@ -25,6 +25,7 @@ from config import (
     LABEL_ENCODER_PATH,
     FEATURE_NAMES_PATH,
     MODEL_PATH,
+    OOD_STATS_PATH,
     MLP_PARAMS,
     RANDOM_STATE,
     BALANCE_CLASSES,
@@ -219,6 +220,36 @@ def save_artifacts(model, metrics, feature_names):
     print(f"Saved model info: {info_path}")
 
 
+def penultimate_forward(X, model):
+    x = X
+    for i in range(len(model.coefs_) - 1):
+        x = x @ model.coefs_[i] + model.intercepts_[i]
+        x = np.maximum(x, 0)
+    return x
+
+
+def compute_ood_stats(X, y, le):
+    n_classes = len(le.classes_)
+    d = X.shape[1]
+
+    class_means = np.zeros((n_classes, d))
+    for cls in range(n_classes):
+        mask = y == cls
+        class_means[cls] = np.mean(X[mask], axis=0)
+
+    cov = np.zeros((d, d))
+    for cls in range(n_classes):
+        mask = y == cls
+        centered = X[mask] - class_means[cls]
+        cov += centered.T @ centered
+
+    cov /= len(X)
+    cov += 0.01 * np.eye(d)
+    cov_inv = np.linalg.inv(cov)
+
+    return class_means, cov_inv
+
+
 def main():
     print("=" * 60)
     print("TRAINING: MLP Base Model")
@@ -232,6 +263,13 @@ def main():
     y_test = data["y_test"]
 
     model, training_time = train_model(X_train, y_train, le)
+
+    print("\nComputing OOD detection statistics from training data...")
+    penultimate_acts = penultimate_forward(X_train, model)
+    class_means, cov_inv = compute_ood_stats(penultimate_acts, y_train, le)
+    with open(OOD_STATS_PATH, "wb") as f:
+        pickle.dump({"class_means": class_means, "cov_inv": cov_inv}, f)
+    print(f"Saved OOD stats ({len(class_means)} classes, {cov_inv.shape[0]} dims): {OOD_STATS_PATH}")
 
     metrics = evaluate_model(model, X_test, y_test, le, training_time)
 
