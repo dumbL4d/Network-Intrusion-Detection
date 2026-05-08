@@ -4,15 +4,38 @@ A real-time Network Intrusion Detection System that uses machine learning to det
 
 ## Architecture
 
+```mermaid
+graph LR
+    A["Attacker Container<br/>(hping3, nmap, iperf3)"]
+    T["Target Container<br/>(Nginx :80)"]
+    D["Detector Container<br/>(MLP + ARF :8080)"]
+
+    A -- "SYN flood / UDP flood / HTTP flood" --> T
+    T -- "target_monitor.sh → /predict POST" --> D
+    A -- "traffic_reporter.py → /predict POST" --> D
 ```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│   Attacker      │────▶│   Target (Nginx) │────▶│   Detector     │
-│   (hping3,      │     │   Port 80        │     │   Port 8080    │
-│    nmap, iperf3)│     └──────────────────┘     │   MLP + ARF     │
-└─────────────────┘                               └─────────────────┘
-        │                                                   ▲
-        └───────────────────────────────────────────────────┘
-                           traffic_reporter.py queries /predict
+
+### Detection Flow
+
+```mermaid
+flowchart TD
+    F["Incoming Flow<br/>(37 features)"] --> PF["prepare_features()"]
+    PF --> SCALE["StandardScaler.transform()"]
+    SCALE --> MLP["MLP Forward Pass<br/>(256 → 128 → 64 → 4)"]
+    MLP --> C{MLP Confidence<br/>≥ 0.7?}
+
+    C -->|Yes| M["Use MLP Prediction"]
+    M --> ARF_C["ARF predicts for<br/>drift comparison"]
+    ARF_C --> ARF_L["ARF learns from sample"]
+    ARF_L --> D1{MLP ≠ ARF<br/>& Drift Detected?}
+    D1 -->|Yes| ALERT1["🚨 Alert + Drift Log"]
+    D1 -->|No| R1["✅ Return MLP Result"]
+
+    C -->|No| ARF_P["ARF Predicts<br/>(Adaptive Random Forest)"]
+    ARF_P --> ARF_LEARN["ARF learns from sample<br/>(online adaptation)"]
+    ARF_LEARN --> D2{ADWIN Detects<br/>Concept Drift?}
+    D2 -->|Yes| ALERT2["🚨 Alert +<br/>Log Drift Event"]
+    D2 -->|No| R2["✅ Return ARF Result"]
 ```
 
 ### Docker Services
