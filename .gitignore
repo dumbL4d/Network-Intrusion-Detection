@@ -28,3 +28,6 @@ desktop.ini
 
 # Internal reference
 PROJECT_REFERENCE.md
+
+# Utility scripts (attacker container)
+scripts/

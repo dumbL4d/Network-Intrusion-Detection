@@ -39,6 +39,9 @@ services:
     container_name: attacker-shell
     stdin_open: true
     tty: true
+    volumes:
+      - ../data:/app/data:ro,Z
+      - ../scripts:/app/scripts:ro,Z
     networks:
       - nids-network
     restart: unless-stopped
